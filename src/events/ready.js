@@ -1,4 +1,4 @@
-import { Events } from "discord.js";
+import { Events, ActivityType } from "discord.js";
 import { logger, startupLog } from "../utils/logger.js";
 import config from "../config/application.js";
 import { reconcileReactionRoleMessages } from "../services/reactionRoleService.js";
@@ -12,7 +12,12 @@ export default {
 
   async execute(client) {
     try {
-      client.user.setPresence(config.bot.presence);
+      client.user.setPresence({
+        status: "dnd",
+        activities: [
+          { name: "/macedoniaa", state: "/macedoniaa", type: ActivityType.Custom },
+        ],
+      });
 
       startupLog(`Ready! Logged in as ${client.user.tag}`);
       startupLog(`Serving ${client.guilds.cache.size} guild(s)`);
