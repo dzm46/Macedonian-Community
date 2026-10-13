@@ -475,6 +475,14 @@ export const botConfig = {
     fun: true,
     music: true,
   },
+
+  // =========================
+  // GUESS THE NUMBER GAME
+  // =========================
+  guessGame: {
+    minIntervalMinutes: 5,
+    maxIntervalMinutes: 120,
+  },
 };
 
 export function validateConfig(config) {
