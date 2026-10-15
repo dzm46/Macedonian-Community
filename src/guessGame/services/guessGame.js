@@ -158,8 +158,16 @@ export async function reconcileScoreMembership(client, guildId) {
   }
 }
 
+async function sendHint(message, text) {
+  try {
+    await message.channel.send(text);
+  } catch (err) {
+    logger.warn(`Could not send guess hint in ${message.channel.id}: ${err.message}`);
+  }
+}
+
 async function handleStaleRound(client, message, round) {
-  await message.react('⏱️').catch(() => {});
+  await sendHint(message, '⏱️ This round has already ended.');
   const { handleRoundExpired } = await import('./guessRoundTimer.js');
   handleRoundExpired(client, message.guild.id).catch((err) => {
     logger.warn(`Expire round after stale guess failed: ${err.message}`);
@@ -189,10 +197,10 @@ export async function handleGuess(client, message) {
   const attempts = await incrementAttempts(client, guildId, userId);
   await recordGuessStats(client, guildId, userId, attempts);
 
-  async function reactToGuess(primaryEmoji) {
-    await message.react(primaryEmoji).catch(() => {});
+  async function sendGuessHint(text) {
+    await sendHint(message, text);
     if (guess === 67) {
-      await message.react('😂').catch(() => {});
+      await sendHint(message, '😂');
     }
   }
 
@@ -201,7 +209,7 @@ export async function handleGuess(client, message) {
     if (!round || isRoundExpired(round)) {
       return handleStaleRound(client, message, round);
     }
-    await reactToGuess('⬇️');
+    await sendGuessHint('⬇️ Too high!');
     return { outcome: 'high', attempts };
   }
 
@@ -210,7 +218,7 @@ export async function handleGuess(client, message) {
     if (!round || isRoundExpired(round)) {
       return handleStaleRound(client, message, round);
     }
-    await reactToGuess('⬆️');
+    await sendGuessHint('⬆️ Too low!');
     return { outcome: 'low', attempts };
   }
 
@@ -222,7 +230,7 @@ export async function handleGuess(client, message) {
       return handleStaleRound(client, message, round);
     }
     if (claim.reason === 'no_round') {
-      await message.react('⏱️').catch(() => {});
+      await sendHint(message, '⏱️ This round has already ended.');
       return { outcome: 'lost_race' };
     }
     return null;
@@ -231,7 +239,7 @@ export async function handleGuess(client, message) {
   const { clearRoundExpiry } = await import('./guessRoundTimer.js');
   clearRoundExpiry(guildId);
 
-  await reactToGuess('🎉');
+  await sendGuessHint('🎉 Correct!');
   await closeRoundPromptMessage(message.channel, claim.round.prompt_message_id, 'won');
 
   return {
