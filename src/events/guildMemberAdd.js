@@ -7,6 +7,7 @@ import { logEvent, EVENT_TYPES } from '../services/loggingService.js';
 import { getServerCounters, updateCounter } from '../services/serverstatsService.js';
 import { setBirthday as dbSetBirthday } from '../utils/database.js';
 import { logger } from '../utils/logger.js';
+import { markScoreMemberActive } from '../guessGame/guessGameStore.js';
 
 export default {
   name: Events.GuildMemberAdd,
@@ -15,6 +16,10 @@ export default {
   async execute(member) {
     try {
         const { guild, user } = member;
+
+        if (!user.bot) {
+          await markScoreMemberActive(member.client, guild.id, member.id);
+        }
         
         const config = await getGuildConfig(member.client, guild.id);
         

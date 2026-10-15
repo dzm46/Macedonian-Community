@@ -5,6 +5,10 @@ import { reconcileReactionRoleMessages } from "../services/reactionRoleService.j
 import { reconcileTicketPanels, reconcileVerificationPanels, reconcileReactionRolePanelHealth } from "../services/panelHealthService.js";
 import { reconcileLevelRoles } from "../services/leveling/levelRoleSyncService.js";
 import { initRiffyAfterReady } from "../services/music/riffySetup.js";
+import { startGuessScheduler } from "../guessGame/services/guessScheduler.js";
+import { restoreRoundTimers } from "../guessGame/services/guessRoundTimer.js";
+import { reconcileScoreMembership } from "../guessGame/services/guessGame.js";
+import { listScheduledGuilds } from "../guessGame/guessGameStore.js";
 
 export default {
   name: Events.ClientReady,
@@ -51,6 +55,17 @@ export default {
       startupLog(
         `Level role sync: scanned ${levelRoleSummary.scannedGuilds} guilds, pruned ${levelRoleSummary.prunedRewardEntries} stale rewards, re-awarded ${levelRoleSummary.rolesReAwarded} roles, errors ${levelRoleSummary.errors}`
       );
+
+      await startGuessScheduler(client);
+      await restoreRoundTimers(client);
+      for (const settings of await listScheduledGuilds(client)) {
+        const guildId = settings.guild_id;
+        if (!guildId) continue;
+        await reconcileScoreMembership(client, guildId).catch((err) => {
+          logger.warn(`Guess score membership sync failed for ${guildId}: ${err.message}`);
+        });
+      }
+      startupLog("Guess-the-number game scheduler and round timers restored");
     } catch (error) {
       logger.error("Error in ready event:", error);
     }

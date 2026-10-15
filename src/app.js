@@ -17,6 +17,7 @@ import { initializeMusic } from './services/music/riffySetup.js';
 import { shutdownMusic } from './services/music/playerHandler.js';
 import pkg from '../package.json' with { type: 'json' };
 import { EXPECTED_SCHEMA_VERSION, EXPECTED_SCHEMA_LABEL } from './config/database/schemaVersion.js';
+import { stopGuessScheduler } from './guessGame/services/guessScheduler.js';
 
 class TitanBot extends Client {
   constructor() {
@@ -341,6 +342,9 @@ class TitanBot extends Client {
       logger.info('Stopping cron jobs...');
       cron.getTasks().forEach(task => task.stop());
       logger.info('✅ Cron jobs stopped');
+
+      stopGuessScheduler();
+      logger.info('✅ Guess game scheduler stopped');
 
       logger.info('Stopping music players...');
       await shutdownMusic(this);

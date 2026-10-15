@@ -7,6 +7,7 @@ import { getServerCounters, updateCounter } from '../services/serverstatsService
 import { getGuildBirthdays, deleteBirthday } from '../utils/database.js';
 import { deleteUserLevelData } from '../services/leveling/leveling.js';
 import { logger } from '../utils/logger.js';
+import { markScoreMemberLeft } from '../guessGame/guessGameStore.js';
 
 export default {
   name: Events.GuildMemberRemove,
@@ -15,6 +16,10 @@ export default {
   async execute(member) {
     try {
         const { guild, user } = member;
+
+        if (!user.bot) {
+          await markScoreMemberLeft(member.client, guild.id, member.id);
+        }
         
         const welcomeConfig = await getWelcomeConfig(member.client, guild.id);
         

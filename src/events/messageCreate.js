@@ -18,6 +18,7 @@ import {
   isValidCountingMessage,
   recordCorrectCount,
 } from '../services/countingGameService.js';
+import { handleGuessMessage } from '../guessGame/handlers/guessHandler.js';
 
 const MESSAGE_XP_RATE_LIMIT_ATTEMPTS = 12;
 const MESSAGE_XP_RATE_LIMIT_WINDOW_MS = 10000;
@@ -32,6 +33,11 @@ export default {
 
       const countingProcessed = await handleCountingGame(message, client);
       if (countingProcessed) {
+        return;
+      }
+
+      const guessProcessed = await handleGuessMessage(client, message);
+      if (guessProcessed) {
         return;
       }
 
