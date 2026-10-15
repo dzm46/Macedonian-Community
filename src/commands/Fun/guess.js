@@ -3,7 +3,11 @@ import {
   PermissionFlagsBits,
   ChannelType,
 } from 'discord.js';
-import guessGameConfig from '../../config/guessGame.js';
+import guessGameConfig, {
+  roundDurationMinutesToSeconds,
+  roundDurationSecondsToMinutes,
+} from '../../config/guessGame.js';
+import { resolveRoundDurationSeconds } from '../../guessGame/guessGameStore.js';
 import { replyEphemeral, deferEphemeralV2, replyPublicV2 } from '../../guessGame/utils/replies.js';
 import {
   createNoticeContainer,
@@ -63,6 +67,14 @@ export default {
             .setMinValue(guessGameConfig.minIntervalMinutes)
             .setMaxValue(guessGameConfig.maxIntervalMinutes)
             .setRequired(true),
+        )
+        .addIntegerOption((option) =>
+          option
+            .setName('round_minutes')
+            .setDescription('How long each round lasts (1 to 15 minutes, default 3)')
+            .setMinValue(guessGameConfig.minRoundDurationMinutes)
+            .setMaxValue(guessGameConfig.maxRoundDurationMinutes)
+            .setRequired(false),
         ),
     )
     .addSubcommand((sub) =>
@@ -117,6 +129,9 @@ export default {
 
       const channel = interaction.options.getChannel('channel');
       const interval = interaction.options.getInteger('interval_minutes');
+      const roundMinutes =
+        interaction.options.getInteger('round_minutes')
+        ?? roundDurationSecondsToMinutes(guessGameConfig.defaultRoundDurationSeconds);
       const me = interaction.guild.members.me;
       const perms = channel.permissionsFor(me);
       const needed = ['ViewChannel', 'SendMessages', 'AddReactions'];
@@ -133,7 +148,14 @@ export default {
         return;
       }
 
-      await setGuildChannel(client, interaction.guild.id, channel.id, interval, guessGameConfig);
+      await setGuildChannel(
+        client,
+        interaction.guild.id,
+        channel.id,
+        interval,
+        guessGameConfig,
+        roundDurationMinutesToSeconds(roundMinutes),
+      );
       await setGuildEnabled(client, interaction.guild.id, true);
       await scheduleNextRound(client, interaction.guild.id);
 
@@ -144,6 +166,7 @@ export default {
           status: 'on',
           channelMention: `${channel}`,
           intervalMinutes: updated.interval_minutes,
+          roundMinutes: roundDurationSecondsToMinutes(resolveRoundDurationSeconds(updated)),
         }),
       );
       return;

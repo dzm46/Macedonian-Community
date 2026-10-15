@@ -1,16 +1,11 @@
-import guessGameConfig from '../../config/guessGame.js';
 import { logger } from '../../utils/logger.js';
-import { getGuildSettings, listActiveRounds, tryExpireRound } from '../guessGameStore.js';
+import { getGuildSettings, listActiveRounds, tryExpireRound, getRoundDurationMs } from '../guessGameStore.js';
 import { closeRoundPromptMessage } from './guessGame.js';
 import { createGuessTimeoutContainer } from '../utils/components.js';
 import { sendComponentsV2 } from '../utils/replies.js';
 
 /** @type {Map<string, NodeJS.Timeout>} */
 const roundExpiryTimers = new Map();
-
-export function getRoundDurationMs() {
-  return (guessGameConfig.roundDurationSeconds || 60) * 1000;
-}
 
 export function clearRoundExpiry(guildId) {
   const timer = roundExpiryTimers.get(guildId);
@@ -78,8 +73,10 @@ export function scheduleRoundExpiry(client, guildId, expiresAt) {
 
 export async function restoreRoundTimers(client) {
   for (const row of await listActiveRounds(client)) {
-    const expiresAt =
-      row.expires_at ?? row.started_at + getRoundDurationMs();
+    const durationMs = row.guild_id
+      ? await getRoundDurationMs(client, row.guild_id)
+      : 180_000;
+    const expiresAt = row.expires_at ?? row.started_at + durationMs;
     scheduleRoundExpiry(client, row.guild_id, expiresAt);
   }
 }

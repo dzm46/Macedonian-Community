@@ -8,7 +8,11 @@ import {
   RadioGroupBuilder,
   RadioGroupOptionBuilder,
 } from 'discord.js';
-import guessGameConfig from '../../config/guessGame.js';
+import guessGameConfig, {
+  roundDurationMinutesToSeconds,
+  roundDurationSecondsToMinutes,
+} from '../../config/guessGame.js';
+import { resolveRoundDurationSeconds } from '../guessGameStore.js';
 import {
   getGuildSettings,
   isGameEnabled,
@@ -24,6 +28,7 @@ export const GUESS_CONFIG_MODAL_ID = 'guess_config_modal';
 export const FIELD_CHANNEL = 'guess_config_channel';
 export const FIELD_ENABLED = 'guess_config_enabled';
 export const FIELD_INTERVAL = 'guess_config_interval';
+export const FIELD_ROUND = 'guess_config_round_minutes';
 
 const ENABLED_VALUE = 'enabled';
 const DISABLED_VALUE = 'disabled';
@@ -31,6 +36,7 @@ const DISABLED_VALUE = 'disabled';
 export function buildGuessConfigModal(settings) {
   const { minIntervalMinutes, maxIntervalMinutes } = guessGameConfig;
   const interval = settings?.interval_minutes ?? guessGameConfig.defaultIntervalMinutes;
+  const roundMinutes = roundDurationSecondsToMinutes(resolveRoundDurationSeconds(settings));
   const enabledSelected = isGameEnabled(settings);
 
   const channelSelect = new ChannelSelectMenuBuilder()
@@ -77,13 +83,26 @@ export function buildGuessConfigModal(settings) {
 
   const intervalLabel = new LabelBuilder()
     .setLabel(`Round interval (${minIntervalMinutes} to ${maxIntervalMinutes})`)
-    .setDescription('Enter a whole number in minutes only.')
+    .setDescription('Minutes between automatic rounds.')
     .setTextInputComponent(intervalInput);
+
+  const roundInput = new TextInputBuilder()
+    .setCustomId(FIELD_ROUND)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setValue(String(roundMinutes));
+
+  const roundLabel = new LabelBuilder()
+    .setLabel(
+      `Round length (${guessGameConfig.minRoundDurationMinutes} to ${guessGameConfig.maxRoundDurationMinutes} min)`,
+    )
+    .setDescription('How long players have to guess before the round times out.')
+    .setTextInputComponent(roundInput);
 
   return new ModalBuilder()
     .setCustomId(GUESS_CONFIG_MODAL_ID)
     .setTitle('Guess game settings')
-    .addLabelComponents(channelLabel, intervalLabel, enabledLabel);
+    .addLabelComponents(channelLabel, intervalLabel, roundLabel, enabledLabel);
 }
 
 export async function handleGuessConfigModalSubmit(interaction, client) {
@@ -152,7 +171,31 @@ export async function handleGuessConfigModalSubmit(interaction, client) {
     return;
   }
 
-  await setGuildChannel(client, interaction.guild.id, channelId, interval, guessGameConfig);
+  const roundRaw = interaction.fields.getTextInputValue(FIELD_ROUND).trim();
+  const roundMinutes = Number(roundRaw);
+  if (
+    !Number.isInteger(roundMinutes)
+    || roundMinutes < guessGameConfig.minRoundDurationMinutes
+    || roundMinutes > guessGameConfig.maxRoundDurationMinutes
+  ) {
+    await replyEphemeral(
+      interaction,
+      createNoticeContainer(
+        'Invalid round length',
+        `Use a whole number of **minutes** between **${guessGameConfig.minRoundDurationMinutes}** and **${guessGameConfig.maxRoundDurationMinutes}**.`,
+      ),
+    );
+    return;
+  }
+
+  await setGuildChannel(
+    client,
+    interaction.guild.id,
+    channelId,
+    interval,
+    guessGameConfig,
+    roundDurationMinutesToSeconds(roundMinutes),
+  );
 
   if (enabled) {
     await setGuildEnabled(client, interaction.guild.id, true);
@@ -169,6 +212,7 @@ export async function handleGuessConfigModalSubmit(interaction, client) {
       status: updated.enabled ? 'on' : 'off',
       channelMention: `${channel}`,
       intervalMinutes: updated.interval_minutes,
+      roundMinutes: roundDurationSecondsToMinutes(resolveRoundDurationSeconds(updated)),
     }),
   );
 }

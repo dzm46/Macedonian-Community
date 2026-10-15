@@ -144,7 +144,7 @@ export function createLeaderboardContainer(rows, { guildId, page = 1, totalCount
   return container;
 }
 
-export function createSetupSummaryContainer({ status, channelMention, intervalMinutes }) {
+export function createSetupSummaryContainer({ status, channelMention, intervalMinutes, roundMinutes }) {
   const container = new ContainerBuilder();
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent('## ⚙️ Guess game configured'),
@@ -154,7 +154,8 @@ export function createSetupSummaryContainer({ status, channelMention, intervalMi
     new TextDisplayBuilder().setContent(
       `Status: **${status}**\n`
         + `Channel: ${channelMention}\n`
-        + `Interval: **${intervalMinutes}** minutes\n\n`
+        + `Interval: **${intervalMinutes}** minutes\n`
+        + `Round length: **${roundMinutes}** minute${roundMinutes === 1 ? '' : 's'}\n\n`
         + 'Members send a number **1 to 100**; reactions show if they\'re close.',
     ),
   );

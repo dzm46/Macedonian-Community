@@ -70,11 +70,12 @@ export async function startRound(client, guildId, channel) {
     return { ok: false, reason: 'permissions' };
   }
 
-  const { getRoundDurationMs, scheduleRoundExpiry } = await import('./guessRoundTimer.js');
+  const { scheduleRoundExpiry } = await import('./guessRoundTimer.js');
+  const { getRoundDurationMs } = await import('../guessGameStore.js');
 
   const secret = pickSecret();
   const startedAt = Date.now();
-  const expiresAt = startedAt + getRoundDurationMs();
+  const expiresAt = startedAt + (await getRoundDurationMs(client, guildId));
   const expiresUnix = Math.floor(expiresAt / 1000);
 
   const prompt = await sendComponentsV2(

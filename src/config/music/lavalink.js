@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { logger } from '../../utils/logger.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -11,6 +12,10 @@ function parseBoolean(value, defaultValue = false) {
     return ['true', '1', 'yes'].includes(String(value).toLowerCase());
 }
 
+function envOverridesNodesFile() {
+    return Boolean(process.env.LAVALINK_NODES?.trim() || process.env.LAVALINK_HOST?.trim());
+}
+
 function parseNodesFromEnv() {
     const raw = process.env.LAVALINK_NODES?.trim();
     if (!raw) {
@@ -19,10 +24,31 @@ function parseNodesFromEnv() {
 
     try {
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : null;
-    } catch {
+        const nodes = parseNodesPayload(parsed);
+        if (!nodes?.length) {
+            logger.warn('LAVALINK_NODES is set but did not parse to a non-empty node list');
+            return null;
+        }
+        return nodes;
+    } catch (error) {
+        logger.warn(`LAVALINK_NODES is set but invalid JSON: ${error.message}`);
         return null;
     }
+}
+
+function buildSingleNodeFromEnv() {
+    const host = process.env.LAVALINK_HOST?.trim();
+    if (!host) {
+        return null;
+    }
+
+    return [{
+        host,
+        port: Number(process.env.LAVALINK_PORT || 2333),
+        password: process.env.LAVALINK_PASSWORD || 'youshallnotpass',
+        secure: parseBoolean(process.env.LAVALINK_SECURE, false),
+        name: process.env.LAVALINK_NAME || 'Main',
+    }];
 }
 
 function parseNodesPayload(parsed) {
@@ -36,6 +62,14 @@ function parseNodesPayload(parsed) {
 }
 
 function loadNodesFromFile() {
+    if (envOverridesNodesFile()) {
+        return null;
+    }
+
+    if (process.env.LAVALINK_NODES_FILE === '') {
+        return null;
+    }
+
     const nodesFile = process.env.LAVALINK_NODES_FILE?.trim()
         || path.join(projectRoot, 'lavalink', 'nodes.json');
 
@@ -57,22 +91,22 @@ export function getLavalinkNodes() {
         return fromJson;
     }
 
+    const singleFromEnv = buildSingleNodeFromEnv();
+    if (singleFromEnv) {
+        return singleFromEnv;
+    }
+
     const fromFile = loadNodesFromFile();
     if (fromFile?.length) {
         return fromFile;
     }
 
-    const host = process.env.LAVALINK_HOST || 'localhost';
-    const port = Number(process.env.LAVALINK_PORT || 2333);
-    const password = process.env.LAVALINK_PASSWORD || 'youshallnotpass';
-    const secure = parseBoolean(process.env.LAVALINK_SECURE, false);
-
     return [{
-        host,
-        port,
-        password,
-        secure,
-        name: process.env.LAVALINK_NAME || 'Main',
+        host: 'localhost',
+        port: 2333,
+        password: 'youshallnotpass',
+        secure: false,
+        name: 'Main',
     }];
 }
 

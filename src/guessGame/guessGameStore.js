@@ -62,12 +62,29 @@ export function isGameEnabled(settings) {
   return Number(settings.enabled) === 1;
 }
 
+export function resolveRoundDurationSeconds(settings) {
+  const value = Number(settings?.round_duration_seconds);
+  const minSeconds = guessGameConfig.minRoundDurationMinutes * 60;
+  const maxSeconds = guessGameConfig.maxRoundDurationMinutes * 60;
+  if (Number.isInteger(value) && value >= minSeconds && value <= maxSeconds) {
+    return value;
+  }
+  return guessGameConfig.defaultRoundDurationSeconds;
+}
+
+export async function getRoundDurationMs(client, guildId) {
+  const settings = await getGuildSettings(client, guildId);
+  return resolveRoundDurationSeconds(settings) * 1000;
+}
+
 export async function upsertGuildSettings(client, guildId, patch) {
   const existing = (await getSettings(client, guildId)) || {};
   const next = {
     guild_id: guildId,
     game_channel_id: existing.game_channel_id ?? null,
     interval_minutes: existing.interval_minutes ?? 30,
+    round_duration_seconds:
+      existing.round_duration_seconds ?? guessGameConfig.defaultRoundDurationSeconds,
     enabled: existing.enabled ?? 1,
     last_round_ended_at: existing.last_round_ended_at ?? null,
     ...patch,
@@ -75,17 +92,29 @@ export async function upsertGuildSettings(client, guildId, patch) {
   return saveSettings(client, guildId, next);
 }
 
-export async function setGuildChannel(client, guildId, channelId, intervalMinutes, config) {
+export async function setGuildChannel(
+  client,
+  guildId,
+  channelId,
+  intervalMinutes,
+  config,
+  roundDurationSeconds,
+) {
   const existing = await getSettings(client, guildId);
   const interval =
     intervalMinutes ??
     existing?.interval_minutes ??
     config.defaultIntervalMinutes;
+  const duration =
+    roundDurationSeconds ??
+    existing?.round_duration_seconds ??
+    config.defaultRoundDurationSeconds;
   const enabled = existing != null ? Number(existing.enabled) === 1 : 1;
 
   return upsertGuildSettings(client, guildId, {
     game_channel_id: channelId,
     interval_minutes: interval,
+    round_duration_seconds: duration,
     enabled: enabled ? 1 : 0,
     last_round_ended_at: existing?.last_round_ended_at ?? null,
   });
@@ -97,6 +126,7 @@ export async function setGuildInterval(client, guildId, intervalMinutes) {
     return upsertGuildSettings(client, guildId, {
       game_channel_id: null,
       interval_minutes: intervalMinutes,
+      round_duration_seconds: guessGameConfig.defaultRoundDurationSeconds,
       enabled: 0,
       last_round_ended_at: null,
     });
@@ -105,6 +135,7 @@ export async function setGuildInterval(client, guildId, intervalMinutes) {
   return upsertGuildSettings(client, guildId, {
     game_channel_id: existing.game_channel_id,
     interval_minutes: intervalMinutes,
+    round_duration_seconds: existing.round_duration_seconds,
     enabled: existing.enabled,
     last_round_ended_at: existing.last_round_ended_at,
   });
@@ -117,6 +148,7 @@ export async function setGuildEnabled(client, guildId, enabled) {
   return upsertGuildSettings(client, guildId, {
     game_channel_id: existing.game_channel_id,
     interval_minutes: existing.interval_minutes,
+    round_duration_seconds: existing.round_duration_seconds,
     enabled: enabled ? 1 : 0,
     last_round_ended_at: existing.last_round_ended_at,
   });
@@ -129,6 +161,7 @@ export async function markRoundEnded(client, guildId, timestamp = Date.now()) {
   return upsertGuildSettings(client, guildId, {
     game_channel_id: existing.game_channel_id,
     interval_minutes: existing.interval_minutes,
+    round_duration_seconds: existing.round_duration_seconds,
     enabled: existing.enabled,
     last_round_ended_at: timestamp,
   });
