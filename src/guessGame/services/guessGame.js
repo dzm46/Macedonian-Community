@@ -158,21 +158,44 @@ export async function reconcileScoreMembership(client, guildId) {
   }
 }
 
+export const HINT_DELETE_DELAY_MS = 3000;
+export const WIN_DELETE_DELAY_MS = 5000;
+
 async function sendHint(message, text) {
   try {
-    await message.channel.send(text);
+    return await message.channel.send(text);
   } catch (err) {
     logger.warn(`Could not send guess hint in ${message.channel.id}: ${err.message}`);
+    return null;
   }
 }
 
+// Schedules deletion of each given message (non-null only) after delayMs.
+// Does not block the caller; only the exact message objects passed in are deleted.
+export function deleteLater(messages, delayMs) {
+  const targets = (messages || []).filter(Boolean);
+  if (targets.length === 0) return;
+
+  setTimeout(() => {
+    for (const target of targets) {
+      Promise.resolve()
+        .then(() => target.delete())
+        .catch((err) => {
+          // 10008 = Unknown Message (already deleted); safe to ignore.
+          if (err?.code === 10008) return;
+          logger.warn(`Could not delete message ${target.id}: ${err.message}`);
+        });
+    }
+  }, delayMs);
+}
+
 async function handleStaleRound(client, message, round) {
-  await sendHint(message, '⏱️ This round has already ended.');
+  const hint = await sendHint(message, '⏱️ This round has already ended.');
   const { handleRoundExpired } = await import('./guessRoundTimer.js');
   handleRoundExpired(client, message.guild.id).catch((err) => {
     logger.warn(`Expire round after stale guess failed: ${err.message}`);
   });
-  return { outcome: 'stale' };
+  return { outcome: 'stale', hintMessages: [hint] };
 }
 
 export async function handleGuess(client, message) {
@@ -197,10 +220,12 @@ export async function handleGuess(client, message) {
   const attempts = await incrementAttempts(client, guildId, userId);
   await recordGuessStats(client, guildId, userId, attempts);
 
+  const hintMessages = [];
+
   async function sendGuessHint(text) {
-    await sendHint(message, text);
+    hintMessages.push(await sendHint(message, text));
     if (guess === 67) {
-      await sendHint(message, '😂');
+      hintMessages.push(await sendHint(message, '😂'));
     }
   }
 
@@ -210,7 +235,7 @@ export async function handleGuess(client, message) {
       return handleStaleRound(client, message, round);
     }
     await sendGuessHint('⬇️ Too high!');
-    return { outcome: 'high', attempts };
+    return { outcome: 'high', attempts, hintMessages };
   }
 
   if (guess < round.secret_number) {
@@ -219,7 +244,7 @@ export async function handleGuess(client, message) {
       return handleStaleRound(client, message, round);
     }
     await sendGuessHint('⬆️ Too low!');
-    return { outcome: 'low', attempts };
+    return { outcome: 'low', attempts, hintMessages };
   }
 
   const now = Date.now();
@@ -230,8 +255,8 @@ export async function handleGuess(client, message) {
       return handleStaleRound(client, message, round);
     }
     if (claim.reason === 'no_round') {
-      await sendHint(message, '⏱️ This round has already ended.');
-      return { outcome: 'lost_race' };
+      const hint = await sendHint(message, '⏱️ This round has already ended.');
+      return { outcome: 'lost_race', hintMessages: [hint] };
     }
     return null;
   }
@@ -244,6 +269,7 @@ export async function handleGuess(client, message) {
 
   return {
     outcome: 'win',
+    hintMessages,
     attempts,
     points: claim.points,
     secret: claim.round.secret_number,
